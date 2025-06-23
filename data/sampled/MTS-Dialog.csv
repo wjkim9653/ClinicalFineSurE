@@ -1,0 +1,86 @@
+ID,section_header,section_text,dialogue
+1050,CC,Cough and abdominal pain for two days.,"Doctor: Hi there! How are you today? 
+Patient: Hi. I am not doing so well. I have had this cough and a pain in my stomach. Right here by my belly button.
+Doctor: How long has this been going on? 
+Patient: Two days.  It has been very painful. 
+Doctor: I would like to examine your abdomen. Is that okay? 
+Patient: Yes."
+37,DISPOSITION,The patient will be going home.,"Doctor: Ready to go home?
+Patient: I just can't wait.
+Doctor: Sure. I can understand.
+Patient: Bye Doctor.
+Doctor: Yes. See you soon."
+1081,FAM/SOCHX,Unknown.,"Doctor: What is your family medical history?  
+Patient: I was adopted.  I don't know my family medical history."
+557,ALLERGY,IV contrast.,"Doctor: Do you have any allergies?
+Patient: I am allergic to IV contrast.
+Doctor: Are you sure?
+Patient: Yes."
+382,CC,"Followup diabetes mellitus, type 1.","Doctor: Hi there! How are doing today? 
+Patient: I am doing well.  
+Doctor: How have you been doing with keeping your hemoglobin levels between four and five point six prercent? 
+Patient: I have been doing well. I have been able to keep it within that range."
+23,ALLERGY,Penicillin.,"Doctor: Are you allergic to anything?
+Patient: Yes, I am allergic to Penicillin.
+Doctor: Any other drugs that you could be allergic to?
+Patient: Nope that is all.
+Doctor: Okay."
+1092,FAM/SOCHX,There is a strong history of epilepsy on the maternal side of family including mom with some nonconvulsive seizure during childhood and additional seizures in maternal great grandmother and a maternal great aunt.  There is no other significant neurological history on the paternal side of the family.,"Doctor: Any of your family members have issues like seizures?
+Patient: None on my father's side, but, yeah, on my mom's side some of the family members had seizures. Like, my mom had them during her childhood. I know that my great grandmother had it and so does my great aunt."
+452,MEDICATIONS,Insulin (unknown dosage),"Doctor: What medications are you currently taking? 
+Patient: I am a diabetic, so I take Insulin. 
+Doctor: How much Insulin do you take? 
+Patient: It varies from day to day."
+1167,ALLERGY,There are no known allergies.,"Doctor: I see here that you're allergic to grapefruit and peanuts. Do you happen to be allergic to any medications you've taken in the past? 
+Patient: Nah, just allergic to grapefruit and peanuts. 
+Doctor: Gotcha. Do you carry an Epi pen around with you? 
+Patient: I try to bring it with me everywhere I go."
+790,ROS,"General:  No fevers, chills, or sweats.  No weight loss or weight gain. Cardiovascular:  No exertional chest pain, orthopnea, PND, or pedal edema.  No palpitations. Neurologic:  No paresis, paresthesias, or syncope. Eyes:  No double vision or blurred vision. Ears:  No tinnitus or decreased auditory acuity. ENT:  No allergy symptoms, such as rhinorrhea or sneezing. GI:  No indigestion, heartburn, or diarrhea.  No blood in the stools or black stools.  No change in bowel habits. GU:  No dysuria, hematuria, or pyuria.  No polyuria or nocturia.  Denies slow urinary stream. Psych:  No symptoms of depression or anxiety. Pulmonary:  No wheezing, cough, or sputum production. Skin:  No skin lesions or nonhealing lesions. Musculoskeletal:  No joint pain, bone pain, or back pain.  No erythema at the joints. Endocrine:  No heat or cold intolerance.  No polydipsia. Hematologic:  No easy bruising or easy bleeding.  No swollen lymph nodes.","Doctor: Let me examine you. Tell me, did you have any fever or chills, any sweating or that sort of thing?
+Patient: Um no.
+Doctor: How about abnormal weight loss or weight gain?
+Patient: No. 
+Doctor: Are you experiencing any chest pain on exertion or shortness of breath normally or when you try to sleep?
+Patient: No, no chest pain and shortness of breath.
+Doctor: Let me see your legs. They look good I don't see any pedal edema. Usually that happens due to excess water retention. Any palpitations?
+Patient: No.
+Doctor: Any feeling of numbness or tingling? Did you faint or lose consciousness anytime?
+Patient: No and no.
+Doctor: Okay, good!
+Doctor: Any double and or blurred vision? 
+Patient: No.
+Doctor: Any difficulty hearing or any wired continuous sound you may hear?
+Patient: No.
+Doctor: Okay, um tell me if you had any um, allergies, or sneezing, or runny nose?
+Patient: No, no really.
+Doctor: Okay, got it.
+Doctor: Any indigestion, or heart burn? Did you notice any blood in stool or black stool? 
+Patient: No.
+Doctor: Any diarrhea or vomiting?
+Patient: Nope. 
+Doctor: Are you feeling thirsty frequently?
+Patient: No, just normal.
+Doctor: Okay.
+Doctor: And I see you got a urine test, so no pus cells or blood present.
+Patient: Yes. 
+Doctor: Any pain while passing urine though? Any blood?
+Patient: No.
+Doctor: And how is the urine frequency? Do you have to wake up at night to urinate?
+Patient: Well, my frequency is normal. I don't have to wake up at night for urinating. 
+Doctor: How bout the stream while passing urine? You think it's normal or somewhat slow? 
+Patient: No, it's absolutely normal.
+Doctor: Okay, so any cough or cold like symptoms any sputum? 
+Patient: Nope.
+Doctor: No wheezing, right?
+Patient: Yes, no wheezing.
+Doctor: I don't see any lesions, that's good. Any mood swings, feeling depressed or have anxiety? 
+Patient: No.
+Doctor: Any joint pain in the legs, back or anywhere? 
+Patient: Um no.
+Doctor: Okay, so no erythema in the joints. Any heat or cold intolerance?
+Patient: No.
+Doctor: Okay, any difficulty swallowing? Let me check here, lymph nodes look fine. And do you bleed easily and does the bleeding stop normally? 
+Patient: Oh yes!
+Doctor: Do you bruise easy?
+Patient: No, not really. 
+Doctor: Okay. Any abnormal skin lesions?
+Patient: No."
