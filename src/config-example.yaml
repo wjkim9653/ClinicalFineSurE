@@ -1,16 +1,47 @@
-run_name: "gpt4_summary_run"
+tag: "MTS_Dialog_Sample"
 
-model:
-  name: "gpt-4"
-  endpoint: "https://api.openai.com/v1/chat/completions"
-  api_key: "your-api-key"
-  parameters:
-    temperature: 0.7
-    max_tokens: 512
+summarizer:
+  spec:
+    - provider: "transformers"
+      checkpoint: "facebook/bart-large-cnn"
+      endpoint: "local"
+    - provider: "transformers"
+      checkpoint: "facebook/bart-large-xsum"
+      endpoint: "local"
+    - provider: "transformers"
+      checkpoint: "Falconsai/text_summarization"
+      endpoint: "local"
+    - provider: "transformers"
+      checkpoint: "Falconsai/medical_summarization"
+      endpoint: "local"
+    - provider: "openai"
+      checkpoint: "openai/gpt-4.1-nano-2025-04-14"
+      endpoint: "https://api.openai.com/v1/chat/completions"
+    - provider: "openrouter"
+      checkpoint: "meta-llama/llama-3.3-8b-instruct:free"
+      endpoint: "https://openrouter.ai/api/v1"
+    - provider: "openrouter"
+      checkpoint: "qwen/qwen3-8b-04-28"
+      endpoint: "https://openrouter.ai/api/v1"
+    - provider: "openrouter"
+      checkpoint: "google/gemma-3-4b-it:free"
+      endpoint: "https://openrouter.ai/api/v1"
 
-output:
-  directory: "sample/gpt4"
-  save_format: "json"
+psudo-labeler:
+  spec:
+    - provider: "openai"
+      checkpoint: "openai/gpt-4.1-mini-2025-04-14"
+      endpoint: "https://api.openai.com/v1/chat/completions"
+
+input_paths:
+  MTS-Dialog-Sampled-10: "data/sampled/MTS-Dialog.csv"
+
+output_paths:
+  transcript: "data/processed/(1)_transcript"
+  keyfact: "data/processed/(2)_keyfact"
+  summary: "data/processed/(3)_summary"
+  factuality: "data/processed/(4)_factuality"
+  alignment: "data/processed/(5)_alignment"
 
 logging:
   level: "INFO"
