@@ -68,9 +68,9 @@ def process_row(row: Dict[str, Any], processor: SampleProcessor) -> Dict[str, An
         fallback_result = processor.fallback_process(row)  # some kind of fallback when there's an error. i guess return some dict that share the same structure(k-v) but w/ placeholder values? idk will implement later. think i should include 'error' field of something.
         return fallback_result
     
-def create_transcript_files(tag: str, file_in: str | Path, file_out: str | Path):
+def create_transcript_files(tag: str, file_in: str | Path, out_path: str | Path):
     file_in = Path(file_in)
-    file_out = Path(file_out)
+    file_out = Path(os.path.join(out_path, f"{tag}_transcripts.jsonl"))
 
     with open(file_out, 'w', encoding='utf-8') as f_out:
         for row in read_csv(filepath=file_in):
@@ -109,7 +109,11 @@ def main():
         # STEP 1: create Transcript files
             # This part is simple formatting & re-structuring process
                 # When complete, this part will yield a transcript file in json format({dataset_name}_transcript.json), containing 'sample_id'(str) and 'transcript'(str) as keys.
-        
+        transcript_file_path = create_transcript_files(
+            tag=config["tag"],
+            file_in=input_path,
+            out_path=output_paths["transcript"]
+        )
 
         # STEP 2: generate Key-Fact Lists for each sample in Transcript
             # This part is a Pseudo-Labeling process, and must be done w/ SOTA LLM
