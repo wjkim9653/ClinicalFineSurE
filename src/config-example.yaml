@@ -27,7 +27,7 @@ summarizer:
       checkpoint: "google/gemma-3-4b-it:free"
       endpoint: "https://openrouter.ai/api/v1"
 
-psudo-labeler:
+pseudo-labeler:
   spec:
     - provider: "openai"
       checkpoint: "openai/gpt-4.1-mini-2025-04-14"

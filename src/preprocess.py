@@ -9,20 +9,11 @@ from typing import Any, Dict
 
 from ClinicalFineSurE.src.tools.api_wrapper import *
 from ClinicalFineSurE.src.tools.lm_prompt_builder import *
-from ClinicalFineSurE.src.tools.sample_processor import SampleProcessor
+from ClinicalFineSurE.src.tools.sample_processor import (SampleProcessor, 
+                                                         create_transcript_files, 
+                                                         generate_summary_files,
+                                                         generate_keyfact_list_files)
 
-def setup_logger(level: str):
-    """
-    Set-Up; Logger Configurations
-    """
-    logging.basicConfig(
-        level=logging.ERROR if level == "error" else logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler("preprocess_mts_dialog.log"),
-            logging.StreamHandler()
-        ]
-    )
 
 def parse_args():
     """
@@ -47,15 +38,6 @@ def load_config(config_path):
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
-def read_csv(filepath: str):
-    """
-    Read; Row-by-Row; the CSV file
-    """
-    with open(filepath, newline='', encoding='utf-8') as csvfile:
-        reader = csv.DictReader(csvfile)  # csv.DictReader -> Read CSV rows as dict (can access w/ row name instead of idx)
-        for row in reader:
-            yield row  # yield iterable
-
 def process_row(row: Dict[str, Any], processor: SampleProcessor) -> Dict[str, Any]:
     """
     Process; a single Row; using an External Processor class instance
@@ -68,23 +50,20 @@ def process_row(row: Dict[str, Any], processor: SampleProcessor) -> Dict[str, An
         fallback_result = processor.fallback_process(row)  # some kind of fallback when there's an error. i guess return some dict that share the same structure(k-v) but w/ placeholder values? idk will implement later. think i should include 'error' field of something.
         return fallback_result
     
-def create_transcript_files(tag: str, file_in: str | Path, out_path: str | Path):
-    file_in = Path(file_in)
-    file_out = Path(os.path.join(out_path, f"{tag}_transcripts.jsonl"))
+def setup_logger(level: str):
+    """
+    Set-Up; Logger Configurations
+    """
+    logging.basicConfig(
+        level=logging.ERROR if level == "error" else logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=[
+            logging.FileHandler("preprocess_mts_dialog.log"),
+            logging.StreamHandler()
+        ]
+    )
 
-    with open(file_out, 'w', encoding='utf-8') as f_out:
-        for row in read_csv(filepath=file_in):
-            sample_id = f"{tag}_{row['ID']}"
-            sample_transcript = row["dialogue"]
-            new_row = {
-                "sample_id": sample_id,
-                "transcript": sample_transcript
-            }
-            f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')
-
-    return file_out
-     
-
+    
 def main():
     args = parse_args()
     config = load_config(args.config)
@@ -111,19 +90,29 @@ def main():
                 # When complete, this part will yield a transcript file in json format({dataset_name}_transcript.json), containing 'sample_id'(str) and 'transcript'(str) as keys.
         transcript_file_path = create_transcript_files(
             tag=config["tag"],
-            file_in=input_path,
+            original_file=input_path,
             out_path=output_paths["transcript"]
         )
 
         # STEP 2: generate Key-Fact Lists for each sample in Transcript
             # This part is a Pseudo-Labeling process, and must be done w/ SOTA LLM
             # When complete, this part will yield a Pseudo-Labeled Key-Fact List file in json format({llm_name}_keyfact.json), containing 'sample_id'(str), 'keyfact'(str) and 'keyfact_list'(list of str) as keys.
-
+        keyfact_file_paths = generate_keyfact_list_files(
+            tag=config["tag"],
+            transcript_file=transcript_file_path,
+            out_path=output_paths["keyfact"],
+            pseudo_labeler_specs=config["pseudo-labeler"]["spec"]
+        )
 
         # STEP 3: generate Summaries for each sample in Transcript
             # This part is a Sample Generation process, and must be done w/ various Summarization Models or LMs
             # When complete, this part will yield a number of summary files in json formats({summarizer_lm_name}_summary.json), each containing 'sample_id'(str), 'summarizer'(str), 'summary'(str), 'summary_list'(list of str) as keys.
-
+        summary_file_paths = generate_summary_files(
+            tag=config["tag"],
+            transcript_file_path=transcript_file_path,
+            out_path=output_paths["summary"],
+            summarizer_lm_specs=config["summarizer"]["spec"]
+        )
 
         # STEP 4: generate Factuality Labels & Factuality Types for Each Transcript + Summary samples from Transcript & Summary
             # This part is a Pseudo-Labeling process, and must be done w/ SOTA LLM
