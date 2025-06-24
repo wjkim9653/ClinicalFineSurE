@@ -9,10 +9,7 @@ from typing import Any, Dict
 
 from ClinicalFineSurE.src.tools.api_wrapper import *
 from ClinicalFineSurE.src.tools.lm_prompt_builder import *
-from ClinicalFineSurE.src.tools.sample_processor import (SampleProcessor, 
-                                                         create_transcript_files, 
-                                                         generate_summary_files,
-                                                         generate_keyfact_list_files)
+from ClinicalFineSurE.src.tools.sample_processor import (create_transcript_files, generate_summary_files, generate_keyfact_list_files, generate_factuality_files, generate_alignment_files)
 
 
 def parse_args():
@@ -88,7 +85,7 @@ def main():
         # STEP 1: create Transcript files
             # This part is simple formatting & re-structuring process
                 # When complete, this part will yield a transcript file in json format({dataset_name}_transcript.json), containing 'sample_id'(str) and 'transcript'(str) as keys.
-        transcript_file_path = create_transcript_files(
+        transcript_file = create_transcript_files(
             tag=config["tag"],
             original_file=input_path,
             out_path=output_paths["transcript"]
@@ -97,9 +94,9 @@ def main():
         # STEP 2: generate Key-Fact Lists for each sample in Transcript
             # This part is a Pseudo-Labeling process, and must be done w/ SOTA LLM
             # When complete, this part will yield a Pseudo-Labeled Key-Fact List file in json format({llm_name}_keyfact.json), containing 'sample_id'(str), 'keyfact'(str) and 'keyfact_list'(list of str) as keys.
-        keyfact_file_paths = generate_keyfact_list_files(
+        generate_keyfact_list_files(
             tag=config["tag"],
-            transcript_file=transcript_file_path,
+            transcript_file=transcript_file,
             out_path=output_paths["keyfact"],
             pseudo_labeler_specs=config["pseudo-labeler"]["spec"]
         )
@@ -107,9 +104,9 @@ def main():
         # STEP 3: generate Summaries for each sample in Transcript
             # This part is a Sample Generation process, and must be done w/ various Summarization Models or LMs
             # When complete, this part will yield a number of summary files in json formats({summarizer_lm_name}_summary.json), each containing 'sample_id'(str), 'summarizer'(str), 'summary'(str), 'summary_list'(list of str) as keys.
-        summary_file_paths = generate_summary_files(
+        generate_summary_files(
             tag=config["tag"],
-            transcript_file_path=transcript_file_path,
+            transcript_file=transcript_file,
             out_path=output_paths["summary"],
             summarizer_lm_specs=config["summarizer"]["spec"]
         )
@@ -117,27 +114,27 @@ def main():
         # STEP 4: generate Factuality Labels & Factuality Types for Each Transcript + Summary samples from Transcript & Summary
             # This part is a Pseudo-Labeling process, and must be done w/ SOTA LLM
             # When complete, this part will yield a number of Factuality Label and Types (between Transcript and Summary Sentences) for each summary files (from each summarizers), each containing 'sample_id'(str), 'summarizer'(str), 'factuality_labels'(list of int), 'factuality_types'(list of str) as keys.
-
+        generate_factuality_files(
+            tag=config["tag"],
+            transcript_file=transcript_file,
+            summary_file_path=output_paths["summary"],
+            out_path=output_paths["factuality"],
+            pseudo_labeler_specs=config["pseudo-labeler"]["spec"],
+            summarizer_lm_specs=config["summarizer"]["spec"]
+        )
 
         # STEP 5: generate Alignments between Summaries and corresponding Key-Fact Lists
             # This part is a Pseudo-Labeling process, and must be done w/ SOTA LLM
             # When complete, this part will yield a number of Alignment Files (between KeyFact List and Summary Sentences) for each summary files (from each summarizers), each containing 'sample_id'(str), 'summarizer'(str), 'keyfact_labels'(list of int), 'sentence_labels'(list of int) as keys.
+        generate_alignment_files(
+            tag=config["tag"], 
+            keyfact_file_path=output_paths["keyfact"],
+            summary_file_path=output_paths["summary"],
+            out_path=config["alignment"],
+            pseudo_labeler_specs=config["pseudo-labeler"]["spec"],
+            summarizer_lm_specs=config["summarizer"]["spec"]
+        )
     
-    
-    
-    
-    
-    
-    # Instanciate processor class ⚠️ This should be much more complex than this. maybe pass yaml w/ configs in it?
-    processor = SampleProcessor(config=config)
-
-    processed_results = []
-    for row in read_csv(csv_path):
-        processed = process_row(row, processor)
-        processed_results.append(processed)
-    
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(processed_results, f, ensure_ascii=False, indent=2)
     
     logging.info(f"Finished processing. Output saved to: {output_path}")
 

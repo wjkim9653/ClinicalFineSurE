@@ -1,9 +1,8 @@
 import os
 from pathlib import Path
-import csv
 import time, re, json, logging
 from ClinicalFineSurE.src.tools.api_wrapper import get_openai_response
-from ClinicalFineSurE.src.tools.utils import simplify_checkpoint
+from ClinicalFineSurE.src.tools.utils import simplify_checkpoint, read_csv, load_jsonl
 
 def keyfact_extraction(client, prompt, model, temperature=0.0, max_retries=2):
     '''
@@ -37,23 +36,14 @@ def keyfact_extraction(client, prompt, model, temperature=0.0, max_retries=2):
                 return "", []  # fallback
     return "", []  # fallback
 
-def read_csv(filepath: str | Path):
-    """
-    Read; Row-by-Row; the CSV file
-    """
-    with open(filepath, newline='', encoding='utf-8') as csvfile:
-        reader = csv.DictReader(csvfile)  # csv.DictReader -> Read CSV rows as dict (can access w/ row name instead of idx)
-        for row in reader:
-            yield row  # yield iterable
-
 def create_transcript_files(
         tag: str, 
         original_file: str | Path, 
         out_path: str | Path
-        ):
+    ):
     original_file = Path(original_file)
     out_path = Path(out_path)
-    file_out = out_path / f"{tag}_transcripts.jsonl"  # single file as output
+    file_out = out_path / f"{tag}_transcript.jsonl"  # single file as output
 
     with open(file_out, 'w', encoding='utf-8') as f_out:
         for row in read_csv(filepath=original_file):
@@ -72,48 +62,52 @@ def generate_keyfact_list_files(
         transcript_file: str | Path, 
         out_path: str | Path,
         pseudo_labeler_specs: list[dict]  # config["pseudo-labeler"]["spec"] as parameter
-        ):
+    ):
     transcript_file = Path(transcript_file)
-    out_path = Path(out_path)
+    if not os.path.exists(transcript_file):  # if transcript file not found
+        logging.error(f"Failed to find transcript jsonl file at: {transcript_file}")
 
+    out_path = Path(out_path)
     out_paths = []
     
-    for pseudo_labeler_spec_dict in pseudo_labeler_specs:  # iterate over each dict from `specs` list
-        simple_identifier_for_llm = simplify_checkpoint(pseudo_labeler_spec_dict["checkpoint"])
-        file_out = out_path / f"{tag}_keyfact_by_{simple_identifier_for_llm}.jsonl"
+    for pseudo_labeler_spec in pseudo_labeler_specs:  # iterate over each dict from `specs` list (⚠️ keep at 1 for now)
+        labeler_identifier = simplify_checkpoint(pseudo_labeler_spec["checkpoint"])
+        file_out = out_path / f"{tag}_keyfact_by_{labeler_identifier}.jsonl"
         """구현해라 원진아"""
         """여기서부터 호출 관련 로직 넣고...."""
 
         out_paths.append(file_out)
-    
-    return out_paths
+    assert len(out_paths) == len(pseudo_labeler_specs)
 
 def generate_summary_files(
         tag: str, 
-        transcript_file_path: str | Path, 
+        transcript_file: str | Path, 
         out_path: str | Path,
         summarizer_lm_specs: list[dict]  # config["summarizer"]["spec"] as parameter
     ):
-    transcript_file_path = Path(transcript_file_path)
-    out_path = Path(out_path)  # ⚠️ directory, not a file
+    transcript_file = Path(transcript_file)
+    if not os.path.exists(transcript_file):  # if transcript file not found
+        logging.error(f"Failed to find transcript jsonl file at: {transcript_file}")
     
+    out_path = Path(out_path)  # ⚠️ directory, not a file
     out_paths = []
 
     for summarizer_spec_dict in summarizer_lm_specs:  # iterate over each summarizer
-        simple_identifier_for_summarizer = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
-        file_out = out_path / f"{tag}_summary_by_{simple_identifier_for_summarizer}.jsonl"
+        summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
+        file_out = out_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
         """구현해라 원진아"""
         """여기서부터 호출 관련 로직 넣고...."""
 
         out_paths.append(file_out)
-    
-    return out_paths
+    assert len(out_paths) == len(summarizer_lm_specs)
 
 def generate_factuality_files(
         tag: str,
-        transcript_file_path: str | Path,
-        summary_file_paths: list[str | Path],
-        out_path: str | Path
+        transcript_file: str | Path, 
+        summary_file_path: str | Path,  # parent dir for where summary jsonl files are located at
+        out_path: str | Path,
+        pseudo_labeler_specs: list[dict],  # config["pseudo-labeler"]["spec"] as parameter
+        summarizer_lm_specs: list[dict]  # config["summarizer"]["spec"] as parameter
     ):
     """
     on each summary sentences list (for a corresponding transcript sample),
@@ -121,10 +115,63 @@ def generate_factuality_files(
     also, generate (psudo-)factuality_types on each summary sentences from given types
         `ERROR_TYPES = ['out-of-context error', 'entity error', 'predicate error', 'circumstantial error', 'grammatical error', 'coreference error', 'linking error', 'other error']`
     """
+    transcript_file = Path(transcript_file)
+    summary_file_path = Path(summary_file_path)
+    out_path = Path(out_path)
 
+    if not os.path.exists(transcript_file):  # if transcript file not found
+        logging.error(f"Failed to find transcript jsonl file at: {transcript_file}")
 
+    for pseudo_labeler_spec in pseudo_labeler_specs:  # for each Pseudo-Labeler LLMs (⚠️ keep at 1 for now)
+        # use the LLM spec to conduct pseudo-labeling
+        # ⚠️ Set up the client for corresponding LLM
+        for summarizer_spec_dict in summarizer_lm_specs:  # for each Summary from differing Summarization LMs
+            summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
+            summary_file_path = summary_file_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
+            if not os.path.exists(summary_file_path): # corresponding summary jsonl file doesn't exist
+                logging.error(f"Failed to find summary jsonl file for {summarizer_identifier} at: {summary_file_path}")
+            """
+            구현해라 원진아
+            각 summary 까서 샘플id로 상응하는 transcript 가져오고 llm으로 factuality label이랑 factuality type 생성하렴
+            """
 
+def generate_alignment_files(
+        tag: str, 
+        keyfact_file_path: str | Path, 
+        summary_file_path: str | Path, 
+        out_path: str | Path, 
+        pseudo_labeler_specs: list[dict],  # config["pseudo-labeler"]["spec"] as parameter
+        summarizer_lm_specs: list[dict]  # config["summarizer"]["spec"] as parameter
+    ):
+    """
+    on each summary sentences, compare against corresponding keyfact list.
+    using pseudo-labeler llm, generate 
+    a. keyfact_labels(binary int list, each elem corresponding to a keyfact from keyfacts list)
+    & 
+    b. sentence_labels(binary int list, each elem corresponding to a sentence from summaries list)
+    """
+    keyfact_file_path = Path(keyfact_file_path)
+    summary_file_path = Path(summary_file_path)
+    out_path = Path(out_path)
+    
+    for pseudo_labeler_spec in pseudo_labeler_specs:  # for each Pseudo-Labeler LLMs (⚠️ keep at 1 for now)
+        labeler_identifier = simplify_checkpoint(pseudo_labeler_spec["checkpoint"])
+        keyfact_file = out_path / f"{tag}_keyfact_by_{labeler_identifier}.jsonl"
+        if not os.path.exists(keyfact_file): # corresponding keyfact list jsonl file doesn't exist
+            logging.error(f"Failed to find keyfact list jsonl file for {labeler_identifier} at: {keyfact_file}")
+        keyfact_list = load_jsonl(keyfact_file)  # list of dict -> ⚠️ use `sample_id` to match with summary_list
+        
+        # use the LLM spec to conduct pseudo-labeling
+        # ⚠️ Set up the client for corresponding LLM
 
-class SampleProcessor:
-    def __init__(self):
-        pass
+        for summarizer_spec_dict in summarizer_lm_specs:  # for each Summary from differing Summarization LMs
+            summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
+            summary_file = summary_file_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
+            if not os.path.exists(summary_file): # corresponding summary jsonl file doesn't exist
+                logging.error(f"Failed to find summary jsonl file for {summarizer_identifier} at: {summary_file}")
+            summary_list = load_jsonl(summary_file)  # list of dict -> ⚠️ use `sample_id` to match with keyfact_list
+            
+            """
+            구현해라 원진아
+            각 summary 까서 샘플id로 상응하는 transcript 가져오고 llm으로 factuality label이랑 factuality type 생성하렴
+            """

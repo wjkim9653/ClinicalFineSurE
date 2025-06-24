@@ -1,3 +1,8 @@
+import csv
+import json
+from pathlib import Path
+
+
 def simplify_checkpoint(checkpoint_path: str):
     """
     simplify the name of a given lm checkpoint
@@ -5,7 +10,7 @@ def simplify_checkpoint(checkpoint_path: str):
     input:
         checkpoint_path (str): "google/gemma-3-4b-it:free"
     output:
-        simple_checkpoint_name (str): "gemma-3-4b-it"
+        simple_checkpoint_name (str): "google--gemma-3-4b-it"
     """
 
     slash_idx = checkpoint_path.find('/')
@@ -17,3 +22,25 @@ def simplify_checkpoint(checkpoint_path: str):
         checkpoint_path = checkpoint_path[:colon_idx]
 
     return checkpoint_path
+
+def read_csv(filepath: str | Path):
+    """
+    Read; Row-by-Row; the CSV file
+    """
+    with open(filepath, newline='', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)  # csv.DictReader -> Read CSV rows as dict (can access w/ row name instead of idx)
+        for row in reader:
+            yield row  # yield iterable
+
+def load_jsonl(filepath: str | Path):
+    """
+    Load and Serialize; a jsonl file; into a python list of dict
+    """
+    data = []
+    with open(filepath, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line:  # skip empty lines
+                obj = json.loads(line)  # json -> dict
+                data.append(obj)
+    return data
