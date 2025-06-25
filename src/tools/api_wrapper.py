@@ -1,3 +1,4 @@
+import openai
 import ast, time, re, json, logging
 
 def get_openai_response(client, prompt, model, temperature=0.0):
