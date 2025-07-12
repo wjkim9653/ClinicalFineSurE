@@ -1,8 +1,11 @@
 import os
 from pathlib import Path
 import time, re, json, logging
-from ClinicalFineSurE.src.tools.api_wrapper import get_openai_response
-from ClinicalFineSurE.src.tools.utils import simplify_checkpoint, read_csv, load_jsonl
+from ClinicalFineSurE.src.tools.api_wrapper import *
+from ClinicalFineSurE.src.tools.utils import *
+from ClinicalFineSurE.src.tools.lm_prompt_builder import *
+from ClinicalFineSurE.src.tools.lm_response_parser import *
+
 
 def keyfact_extraction(client, prompt, model, temperature=0.0, max_retries=2):
     '''
@@ -11,7 +14,7 @@ def keyfact_extraction(client, prompt, model, temperature=0.0, max_retries=2):
         keyfacts: list (of str)
     '''
     def parse_llm_output_to_list(llm_output_str):
-        cleaned = re.sub(r"^```(?:json)?\n|\n```$", "", llm_output_str.strip(), flags=re.DOTALL)
+        cleaned = re.sub(r"^```(?:json)?\n|\n```$", "", llm_output_str.strip(), flags=re.DOTALL)  # .DOTALL is for including linebreaks('\n') in the resulting regex extraction strings
         try:
             parsed_json = json.loads(cleaned)
             return parsed_json.get("key facts", [])
@@ -36,11 +39,19 @@ def keyfact_extraction(client, prompt, model, temperature=0.0, max_retries=2):
                 return "", []  # fallback
     return "", []  # fallback
 
+
+
+
 def create_transcript_files(
         tag: str, 
         original_file: str | Path, 
         out_path: str | Path
     ):
+    """
+    STEP 1: create Transcript files
+    This part is simple formatting & re-structuring process
+    When complete, this part will yield a transcript file in json format({dataset_name}_transcript.json), containing 'sample_id'(str) and 'transcript'(str) as keys.
+    """
     original_file = Path(original_file)
     out_path = Path(out_path)
     file_out = out_path / f"{tag}_transcript.jsonl"  # single file as output
@@ -63,6 +74,11 @@ def generate_keyfact_list_files(
         out_path: str | Path,
         pseudo_labeler_specs: list[dict]  # config["pseudo-labeler"]["spec"] as parameter
     ):
+    """
+    STEP 2: generate Key-Fact Lists for each sample in Transcript
+    This part is a Pseudo-Labeling process, and should be done w/ SOTA LLM
+    When complete, this part will yield a Pseudo-Labeled Key-Fact List file in json format({llm_name}_keyfact.json), containing 'sample_id'(str), 'keyfact'(str) and 'keyfact_list'(list of str) as keys.
+    """
     transcript_file = Path(transcript_file)
     if not os.path.exists(transcript_file):  # if transcript file not found
         logging.error(f"Failed to find transcript jsonl file at: {transcript_file}")
@@ -71,13 +87,38 @@ def generate_keyfact_list_files(
     out_paths = []
     
     for pseudo_labeler_spec in pseudo_labeler_specs:  # iterate over each dict from `specs` list (⚠️ keep at 1 for now)
-        labeler_identifier = simplify_checkpoint(pseudo_labeler_spec["checkpoint"])
+        client, model_ckpt = inference_api_resolver(pseudo_labeler_spec)
+        
+        labeler_identifier = simplify_checkpoint(model_ckpt)
         file_out = out_path / f"{tag}_keyfact_by_{labeler_identifier}.jsonl"
-        """구현해라 원진아"""
-        """여기서부터 호출 관련 로직 넣고...."""
+        
+        with open(file_out, 'w', encoding='utf-8') as f_out:
+            for row in read_csv(filepath=transcript_file):
+                sample_id = row["sample_id"]
+                transcript = row["transcript"]
+                
+                keyfact_extraction_prompt = get_keyfact_extraction_prompt(transcript)
+                try:
+                    llm_output, keyfacts = keyfact_extraction(
+                        client=client,
+                        prompt=keyfact_extraction_prompt,
+                        model=model_ckpt,
+                    )  # Acquire Machine-Extracted-KeyFacts via LLM API Call
+
+                    new_row = {
+                        "sample_id": sample_id,
+                        "transcript": transcript,  # ⚠️ rm if unnecessary
+                        "keyfact": llm_output,  # ⚠️ rm if unnecessary
+                        "keyfact_list": keyfacts
+                    }
+                    f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')  # save newly extracted keyfact instance as new row
+                    logging.info(f"Successfully saved newly extracted Machine-KeyFact for sample_id: {sample_id}")
+                except Exception as e:
+                    logging.error(f"KeyFact Extraction for sample_id({sample_id}) Failed :\n{e}")
 
         out_paths.append(file_out)
     assert len(out_paths) == len(pseudo_labeler_specs)
+
 
 def generate_summary_files(
         tag: str, 
@@ -85,6 +126,11 @@ def generate_summary_files(
         out_path: str | Path,
         summarizer_lm_specs: list[dict]  # config["summarizer"]["spec"] as parameter
     ):
+    """
+    STEP 3: generate Summaries for each sample in Transcript
+    This part is a Sample Generation process, and must be done w/ various Summarization Models or LMs
+    When complete, this part will yield a number of summary files in json formats({summarizer_lm_name}_summary.json), each containing 'sample_id'(str), 'summarizer'(str), 'summary'(str), 'summary_list'(list of str) as keys.
+    """
     transcript_file = Path(transcript_file)
     if not os.path.exists(transcript_file):  # if transcript file not found
         logging.error(f"Failed to find transcript jsonl file at: {transcript_file}")
@@ -93,13 +139,31 @@ def generate_summary_files(
     out_paths = []
 
     for summarizer_spec_dict in summarizer_lm_specs:  # iterate over each summarizer
+        client, model_ckpt = inference_api_resolver(inference_spec=summarizer_spec_dict)
         summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
         file_out = out_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
-        """구현해라 원진아"""
-        """여기서부터 호출 관련 로직 넣고...."""
-
+        with open(file_out, 'w', encoding='utf-8') as f_out:
+            for row in read_csv(filepath=transcript_file):
+                sample_id = row["sample_id"]
+                transcript = row["transcript"]
+                summarization_prompt = get_summarization_prompt(transcript=transcript)
+                try:
+                    raw_summarization_output = get_openai_response(client=client, prompt=summarization_prompt, model=model_ckpt)
+                    parsed_summary_string, parsed_summary_list = parsing_summarizer_output(output=raw_summarization_output)
+                    new_row = {
+                        "sample_id": sample_id,
+                        "transcript": transcript,
+                        "summarizer": summarizer_identifier,
+                        "summary": parsed_summary_string,
+                        "summary_list": parsed_summary_list
+                    }
+                    f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')
+                    logging.info(f"Successfully saved newly generated summary for sample_id({sample_id}) w/ model({summarizer_identifier})")
+                except Exception as e:
+                    logging.error(f"Error while generating summary for sample_id({sample_id}) w/ model({summarizer_identifier}):\n{e}")
         out_paths.append(file_out)
     assert len(out_paths) == len(summarizer_lm_specs)
+
 
 def generate_factuality_files(
         tag: str,
@@ -123,17 +187,49 @@ def generate_factuality_files(
         logging.error(f"Failed to find transcript jsonl file at: {transcript_file}")
 
     for pseudo_labeler_spec in pseudo_labeler_specs:  # for each Pseudo-Labeler LLMs (⚠️ keep at 1 for now)
-        # use the LLM spec to conduct pseudo-labeling
-        # ⚠️ Set up the client for corresponding LLM
+        client, model_ckpt = inference_api_resolver(pseudo_labeler_spec)  # use the LLM spec to conduct pseudo-labeling
+        labeler_identifier = simplify_checkpoint(model_ckpt)
+        out_paths = []
         for summarizer_spec_dict in summarizer_lm_specs:  # for each Summary from differing Summarization LMs
             summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
             summary_file_path = summary_file_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
             if not os.path.exists(summary_file_path): # corresponding summary jsonl file doesn't exist
                 logging.error(f"Failed to find summary jsonl file for {summarizer_identifier} at: {summary_file_path}")
             """
-            구현해라 원진아
-            각 summary 까서 샘플id로 상응하는 transcript 가져오고 llm으로 factuality label이랑 factuality type 생성하렴
+            각 summary 까서 샘플id로 상응하는 transcript 가져오고 llm으로 factuality label이랑 factuality type 생성
             """
+            file_out = out_path / f"{tag}_{summarizer_identifier}_summary_factuality_by_{labeler_identifier}.json"
+            with open(file_out, 'w', encoding='utf-8') as f_out:
+                for row in read_csv(filepath=summary_file_path):  # iter over each transcript-summary pairs
+                    retry_cnt = 0
+                    while (retry_cnt < 3):
+                        try:
+                            sample_id = row["sample_id"]
+                            transcript = row["transcript"]
+                            summary_list = row["summary_list"]
+
+                            fact_checking_prompt = get_fact_checking_prompt(input=transcript, sentences=summary_list)
+                            factuality_raw_llm_output = get_openai_response(client=client, prompt=fact_checking_prompt, model=model_ckpt)
+                            factuality_labels, factuality_types = parsing_llm_fact_checking_output(factuality_raw_llm_output)
+                            
+                            # Checking if parsing is successful
+                            if len(factuality_labels) == len(summary_list):  # Successful parsing
+                                new_row = {
+                                    "sample_id": sample_id,
+                                    "transcript": transcript,
+                                    "summary_list": summary_list,
+                                    "summarizer": summarizer_identifier,
+                                    "labeler": labeler_identifier,
+                                    "factuality_labels": factuality_labels,
+                                    "factuality_types": factuality_types
+                                }
+                                f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')  # save newly generated & parsed factuaity labels & types
+                                logging.info(f"Successfully saved newly extracted Factuality Labels & Types for sample_id: {sample_id}")
+                        except Exception as e:
+                            logging.error(f"Pseudo-Labeling Factuality Labels & Types for sample_id({sample_id}) Failed :\n{e}")
+            out_paths.append(out_path)
+        assert len(out_paths) == len(summarizer_lm_specs)
+        
 
 def generate_alignment_files(
         tag: str, 
@@ -172,6 +268,6 @@ def generate_alignment_files(
             summary_list = load_jsonl(summary_file)  # list of dict -> ⚠️ use `sample_id` to match with keyfact_list
             
             """
-            구현해라 원진아
-            각 summary 까서 샘플id로 상응하는 transcript 가져오고 llm으로 factuality label이랑 factuality type 생성하렴
+            구현해라 원진아 ㅗㅗㅗㅗㅗㅗㅗㅗㅗㅗ 니가하셈 뭔데 이래라 저래라냐 시벌
+            keyfact_labels, sentence_labels 만들어랏
             """

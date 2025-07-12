@@ -84,7 +84,7 @@ def main():
 
         # STEP 1: create Transcript files
             # This part is simple formatting & re-structuring process
-                # When complete, this part will yield a transcript file in json format({dataset_name}_transcript.json), containing 'sample_id'(str) and 'transcript'(str) as keys.
+            # When complete, this part will yield a transcript file in json format({dataset_name}_transcript.json), containing 'sample_id'(str) and 'transcript'(str) as keys.
         transcript_file = create_transcript_files(
             tag=config["tag"],
             original_file=input_path,
@@ -92,13 +92,13 @@ def main():
         )
 
         # STEP 2: generate Key-Fact Lists for each sample in Transcript
-            # This part is a Pseudo-Labeling process, and must be done w/ SOTA LLM
+            # This part is a Pseudo-Labeling process, and should be done w/ SOTA LLM
             # When complete, this part will yield a Pseudo-Labeled Key-Fact List file in json format({llm_name}_keyfact.json), containing 'sample_id'(str), 'keyfact'(str) and 'keyfact_list'(list of str) as keys.
         generate_keyfact_list_files(
             tag=config["tag"],
             transcript_file=transcript_file,
             out_path=output_paths["keyfact"],
-            pseudo_labeler_specs=config["pseudo-labeler"]["spec"]
+            pseudo_labeler_specs=config["pseudo-labeler"]["spec"]  # list of dict as parameter
         )
 
         # STEP 3: generate Summaries for each sample in Transcript

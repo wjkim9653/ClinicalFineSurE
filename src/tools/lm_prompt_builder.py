@@ -1,4 +1,28 @@
 '''
+for summary generation
+'''
+def get_summarization_prompt(transcript: str):
+    '''
+    Args:
+        transctip: the original text (in str type) to summarize
+    Return:
+        prompt: the final input prompt
+    '''
+    prompt = \
+'''
+Text: %s
+
+Instruction: Summarize the Text.
+
+Provide your answer in JSON format. The answer should be a dictionary with the key “summary” containing a generated summary as a string:
+{“summary”: “your summary”}
+
+JSON Output:
+''' % transcript
+    
+    return prompt
+
+'''
 for fact checking
 '''
 def get_fact_checking_prompt(input, sentences):

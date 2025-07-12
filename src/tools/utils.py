@@ -5,7 +5,8 @@ from pathlib import Path
 
 def simplify_checkpoint(checkpoint_path: str):
     """
-    simplify the name of a given lm checkpoint
+    simplify the name of a given lm checkpoint 
+    (main purpose is to make sure model checkpoint doesn't include '/' since it will mess up filename/directory settings when used in output file names)
     e.g.
     input:
         checkpoint_path (str): "google/gemma-3-4b-it:free"
@@ -26,6 +27,7 @@ def simplify_checkpoint(checkpoint_path: str):
 def read_csv(filepath: str | Path):
     """
     Read; Row-by-Row; the CSV file
+    yields iterable rows
     """
     with open(filepath, newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)  # csv.DictReader -> Read CSV rows as dict (can access w/ row name instead of idx)

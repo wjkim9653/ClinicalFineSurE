@@ -1,5 +1,43 @@
+import os
 import openai
 import ast, time, re, json, logging
+
+
+def inference_api_resolver(inference_spec: dict):
+    """
+    Input:
+        dictionary w/ following keys: 'provider', 'checkpoint', 'endpoint'
+            e.g. {"provider":"openai", "checkpoint":"openai/gpt-4.1-mini-2025-04-14", "endpoint":"https://api.openai.com/v1/chat/completions"}
+    """
+    if any(key not in inference_spec.keys() for key in ["provider", "checkpoint", "endpoint"]):
+        logging.ERROR(f"llm inference api resolver failed due to missing key from input parameter dictionary: {key}")
+
+    if inference_spec["provider"].lower() == "openai":
+        try:
+            openai_api_key = os.getenv("OPENAI_API_KEY")
+        except Exception as e:
+            logging.Error("Error while trying to fetch OS ENV VAR for API KEY: OPENAI_API_KEY\n{e}")
+        
+        client = openai.OpenAI(api_key=openai_api_key)
+        model_ckpt = inference_spec["checkpoint"]
+        return client, model_ckpt
+    
+    if inference_spec["provider"].lower() == "openrouter":
+        try:
+            openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        except:
+            logging.Error("Error while trying to fetch OS ENV VAR for API KEY: OPENROUTER_API_KEY\n{e}")
+        base_url = inference_spec["endpoint"]
+        client = openai.OpenAI(
+            base_url=base_url,
+            api_key=openrouter_api_key
+        )
+        model_ckpt = inference_spec["checkpoint"]
+        return client, model_ckpt
+
+
+
+
 
 def get_openai_response(client, prompt, model, temperature=0.0):
 
@@ -11,7 +49,9 @@ def get_openai_response(client, prompt, model, temperature=0.0):
     Return: 
         text_response: the output from LLMs
     '''
-
+    model = model.partition("/")[2] or model
+    model = model.partition("--")[2] or model
+    
     params = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}]

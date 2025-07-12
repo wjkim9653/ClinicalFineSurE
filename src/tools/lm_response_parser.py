@@ -1,5 +1,32 @@
+import re
 import ast
+import json
+import logging
 ERROR_TYPES = ['out-of-context error', 'entity error', 'predicate error', 'circumstantial error', 'grammatical error', 'coreference error', 'linking error', 'other error']
+
+
+def parsing_summarizer_output(output: str):
+    '''
+    Args:
+        output: original raw output from summarizer lm
+    Return:
+        summary_string: parsed summary form (in str type)
+        summary_list: a list of string that includes split summary in sentence level
+    '''
+    try:
+        binarized = dict(output)
+        assert("summary" in binarized.keys())
+        summary_string = binarized["summary"]
+    except Exception as e:
+        logging.Error(f"Failed to binarize raw summary string into python dict\n{e}")
+    
+    try:
+        summary_list = re.split(r'(?<=[.!?])\s+', summary_string)
+    except Exception as e:
+        logging.Error(f"Failed to split summary string into individual sentences.\n{e}")
+
+    return summary_string, summary_list
+
 
 def parsing_llm_fact_checking_output(output):
 
