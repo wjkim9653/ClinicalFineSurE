@@ -232,7 +232,8 @@ def generate_factuality_files(
         
 
 def generate_alignment_files(
-        tag: str, 
+        tag: str,
+        transcript_file_path: str | Path,
         keyfact_file_path: str | Path, 
         summary_file_path: str | Path, 
         out_path: str | Path, 
@@ -246,28 +247,57 @@ def generate_alignment_files(
     & 
     b. sentence_labels(binary int list, each elem corresponding to a sentence from summaries list)
     """
+    transcript_file_path = Path(transcript_file_path)
     keyfact_file_path = Path(keyfact_file_path)
     summary_file_path = Path(summary_file_path)
     out_path = Path(out_path)
     
+    transcript_file = transcript_file_path / f"{tag}_transcript.jsonl"
+    all_sample_ids = []
+    with open(transcript_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            sample = json.loads(line)
+            all_sample_ids.append(sample["sample_id"])
+
     for pseudo_labeler_spec in pseudo_labeler_specs:  # for each Pseudo-Labeler LLMs (⚠️ keep at 1 for now)
+        client, model_ckpt = inference_api_resolver(inference_spec=pseudo_labeler_spec)
         labeler_identifier = simplify_checkpoint(pseudo_labeler_spec["checkpoint"])
-        keyfact_file = out_path / f"{tag}_keyfact_by_{labeler_identifier}.jsonl"
+        keyfact_file = keyfact_file_path / f"{tag}_keyfact_by_{labeler_identifier}.jsonl"
         if not os.path.exists(keyfact_file): # corresponding keyfact list jsonl file doesn't exist
             logging.error(f"Failed to find keyfact list jsonl file for {labeler_identifier} at: {keyfact_file}")
-        keyfact_list = load_jsonl(keyfact_file)  # list of dict -> ⚠️ use `sample_id` to match with summary_list
-        
-        # use the LLM spec to conduct pseudo-labeling
-        # ⚠️ Set up the client for corresponding LLM
+        keyfacts = load_jsonl(keyfact_file)  # list of dict -> ⚠️ use `sample_id` to match with summary_list
+        indexed_keyfacts = {item["sample_id"]: item for item in keyfacts}
+
+        f_out = out_path / f"{tag}_{labeler_identifier}_keyfact_alignment_against_summaries.json"
 
         for summarizer_spec_dict in summarizer_lm_specs:  # for each Summary from differing Summarization LMs
             summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
             summary_file = summary_file_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
             if not os.path.exists(summary_file): # corresponding summary jsonl file doesn't exist
                 logging.error(f"Failed to find summary jsonl file for {summarizer_identifier} at: {summary_file}")
-            summary_list = load_jsonl(summary_file)  # list of dict -> ⚠️ use `sample_id` to match with keyfact_list
-            
-            """
-            구현해라 원진아 ㅗㅗㅗㅗㅗㅗㅗㅗㅗㅗ 니가하셈 뭔데 이래라 저래라냐 시벌
-            keyfact_labels, sentence_labels 만들어랏
-            """
+            summaries = load_jsonl(summary_file)  # list of dict -> ⚠️ use `sample_id` to match with keyfact_list
+            indexed_summaries = {item["sample_id"]: item for item in summaries}
+
+            for sample_id in all_sample_ids:
+                keyfact_list = indexed_keyfacts.get(sample_id)
+                summaries_list = indexed_summaries.get(sample_id)
+
+                keyfact_alignment_prompt = get_keyfact_alighment_prompt(keyfacts=keyfact_list, sentences=summaries_list)
+                try:
+                    raw_output = get_openai_response(client=client, prompt=keyfact_alignment_prompt, model=model_ckpt)
+                    keyfact_alignment_labels, aligned_summary_line_numbers = parsing_llm_keyfact_alighment_output(output=raw_output)
+                    '''Score Calculations' omitted here, since it's about creating pseudo-labeled dataset for FineSurE input, not the final score and rankings.'''
+                    new_row = {
+                        "sample_id": sample_id,
+                        "keyfact_labeler": labeler_identifier,
+                        "summarizer": summarizer_identifier,
+                        "labler": labeler_identifier,
+                        "keyfact_list": keyfact_list,
+                        "summary_list": summaries_list,
+                        "keyfact_alignment_labels": keyfact_alignment_labels,
+                        "matched_summary_lines": aligned_summary_line_numbers
+                    }
+                    f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')
+                    logging.info(f"Successfully saved newly labled Keyfact <-> Summary Alignment for sample_id: {sample_id}")
+                except Exception as e:
+                    logging.Error(f"Error while pseudo-labeling keyfact-summary alignment for sample_id({sample_id}):\n{e}")
