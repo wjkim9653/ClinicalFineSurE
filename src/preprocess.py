@@ -7,9 +7,9 @@ import os
 from pathlib import Path
 from typing import Any, Dict
 
-from ClinicalFineSurE.src.tools.api_wrapper import *
-from ClinicalFineSurE.src.tools.lm_prompt_builder import *
-from ClinicalFineSurE.src.tools.sample_processor import (create_transcript_files, generate_summary_files, generate_keyfact_list_files, generate_factuality_files, generate_alignment_files)
+from src.tools.api_wrapper import *
+from src.tools.lm_prompt_builder import *
+from src.tools.sample_processor import (create_transcript_files, generate_summary_files, generate_keyfact_list_files, generate_factuality_files, generate_alignment_files)
 
 
 def parse_args():
@@ -35,7 +35,7 @@ def load_config(config_path):
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
-def process_row(row: Dict[str, Any], processor: SampleProcessor) -> Dict[str, Any]:
+'''def process_row(row: Dict[str, Any], processor: SampleProcessor) -> Dict[str, Any]:
     """
     Process; a single Row; using an External Processor class instance
     """
@@ -43,9 +43,9 @@ def process_row(row: Dict[str, Any], processor: SampleProcessor) -> Dict[str, An
         result = processor.process(row)
         return result
     except Exception as e:
-        logging.error(f"Error processing row w/ id={row.get("ID")}")  # ⚠️ original csv's column-name dependency here! ideally, such hard-coded dependency("ID") must be removed. i leave it to future work...
+        logging.error(f"Error processing row w/ id={row.get('ID')}")  # ⚠️ original csv's column-name dependency here! ideally, such hard-coded dependency("ID") must be removed. i leave it to future work...
         fallback_result = processor.fallback_process(row)  # some kind of fallback when there's an error. i guess return some dict that share the same structure(k-v) but w/ placeholder values? idk will implement later. think i should include 'error' field of something.
-        return fallback_result
+        return fallback_result'''
     
 def setup_logger(level: str):
     """
@@ -128,9 +128,10 @@ def main():
             # When complete, this part will yield a number of Alignment Files (between KeyFact List and Summary Sentences) for each summary files (from each summarizers), each containing 'sample_id'(str), 'summarizer'(str), 'keyfact_labels'(list of int), 'sentence_labels'(list of int) as keys.
         generate_alignment_files(
             tag=config["tag"], 
+            transcript_file_path=output_paths["transcript"],
             keyfact_file_path=output_paths["keyfact"],
             summary_file_path=output_paths["summary"],
-            out_path=config["alignment"],
+            out_path=output_paths["alignment"],
             pseudo_labeler_specs=config["pseudo-labeler"]["spec"],
             summarizer_lm_specs=config["summarizer"]["spec"]
         )
@@ -146,5 +147,5 @@ if __name__ == "__main__":
 
 """
 To Run: 
-python preprocess/preprocess-mts-dialog.py dataset/sampled/MTS-Dialog.csv --config configs/config-example.yaml
+PYTHONPATH=. python -m src.preprocess --config configs/config.yaml --logging info
 """

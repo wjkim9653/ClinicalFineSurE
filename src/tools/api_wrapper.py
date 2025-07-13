@@ -16,7 +16,7 @@ def inference_api_resolver(inference_spec: dict):
         try:
             openai_api_key = os.getenv("OPENAI_API_KEY")
         except Exception as e:
-            logging.Error("Error while trying to fetch OS ENV VAR for API KEY: OPENAI_API_KEY\n{e}")
+            logging.error("Error while trying to fetch OS ENV VAR for API KEY: OPENAI_API_KEY\n{e}")
         
         client = openai.OpenAI(api_key=openai_api_key)
         model_ckpt = inference_spec["checkpoint"]
@@ -26,7 +26,7 @@ def inference_api_resolver(inference_spec: dict):
         try:
             openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
         except:
-            logging.Error("Error while trying to fetch OS ENV VAR for API KEY: OPENROUTER_API_KEY\n{e}")
+            logging.error("Error while trying to fetch OS ENV VAR for API KEY: OPENROUTER_API_KEY\n{e}")
         base_url = inference_spec["endpoint"]
         client = openai.OpenAI(
             base_url=base_url,
@@ -49,8 +49,18 @@ def get_openai_response(client, prompt, model, temperature=0.0):
     Return: 
         text_response: the output from LLMs
     '''
-    model = model.partition("/")[2] or model
-    model = model.partition("--")[2] or model
+    if "/" in model:
+        provider, _, model_name = model.partition("/")
+        if provider == "openai":
+            model = model_name
+        else:
+            model = model
+    elif "--" in model:
+        provider, _, model_name = model.partition("--")
+        if provider == "openai":
+            model = model_name
+        else:
+            model = f"{provider}/{model_name}"
     
     params = {
         "model": model,

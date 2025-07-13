@@ -14,16 +14,18 @@ def parsing_summarizer_output(output: str):
         summary_list: a list of string that includes split summary in sentence level
     '''
     try:
-        binarized = dict(output)
+        # 유니코드 따옴표 -> ASCII 따옴표
+        output = output.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'")
+        binarized = json.loads(output)
         assert("summary" in binarized.keys())
         summary_string = binarized["summary"]
     except Exception as e:
-        logging.Error(f"Failed to binarize raw summary string into python dict\n{e}")
+        logging.error(f"Failed to binarize raw summary string into python dict\n{e}\nraw_output_from_llm was:\n{output}")
     
     try:
         summary_list = re.split(r'(?<=[.!?])\s+', summary_string)
     except Exception as e:
-        logging.Error(f"Failed to split summary string into individual sentences.\n{e}")
+        logging.error(f"Failed to split summary string into individual sentences.\n{e}")
 
     return summary_string, summary_list
 

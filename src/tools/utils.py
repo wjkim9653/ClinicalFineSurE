@@ -34,6 +34,11 @@ def read_csv(filepath: str | Path):
         for row in reader:
             yield row  # yield iterable
 
+def read_jsonl(filepath: str | Path):
+    with open(filepath, encoding='utf-8') as f:
+        for line in f:
+            yield json.loads(line)
+
 def load_jsonl(filepath: str | Path):
     """
     Load and Serialize; a jsonl file; into a python list of dict

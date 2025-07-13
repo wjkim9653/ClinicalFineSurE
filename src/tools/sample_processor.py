@@ -1,10 +1,11 @@
 import os
+import pprint
 from pathlib import Path
 import time, re, json, logging
-from ClinicalFineSurE.src.tools.api_wrapper import *
-from ClinicalFineSurE.src.tools.utils import *
-from ClinicalFineSurE.src.tools.lm_prompt_builder import *
-from ClinicalFineSurE.src.tools.lm_response_parser import *
+from src.tools.api_wrapper import *
+from src.tools.utils import *
+from src.tools.lm_prompt_builder import *
+from src.tools.lm_response_parser import *
 
 
 def keyfact_extraction(client, prompt, model, temperature=0.0, max_retries=2):
@@ -93,7 +94,8 @@ def generate_keyfact_list_files(
         file_out = out_path / f"{tag}_keyfact_by_{labeler_identifier}.jsonl"
         
         with open(file_out, 'w', encoding='utf-8') as f_out:
-            for row in read_csv(filepath=transcript_file):
+            for row in read_jsonl(filepath=transcript_file):
+                print(row)
                 sample_id = row["sample_id"]
                 transcript = row["transcript"]
                 
@@ -143,7 +145,7 @@ def generate_summary_files(
         summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
         file_out = out_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
         with open(file_out, 'w', encoding='utf-8') as f_out:
-            for row in read_csv(filepath=transcript_file):
+            for row in read_jsonl(filepath=transcript_file):
                 sample_id = row["sample_id"]
                 transcript = row["transcript"]
                 summarization_prompt = get_summarization_prompt(transcript=transcript)
@@ -192,15 +194,15 @@ def generate_factuality_files(
         out_paths = []
         for summarizer_spec_dict in summarizer_lm_specs:  # for each Summary from differing Summarization LMs
             summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
-            summary_file_path = summary_file_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
-            if not os.path.exists(summary_file_path): # corresponding summary jsonl file doesn't exist
-                logging.error(f"Failed to find summary jsonl file for {summarizer_identifier} at: {summary_file_path}")
+            unique_summary_file_path = summary_file_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
+            if not os.path.exists(unique_summary_file_path): # corresponding summary jsonl file doesn't exist
+                logging.error(f"Failed to find summary jsonl file for {summarizer_identifier} at: {unique_summary_file_path}")
             """
             각 summary 까서 샘플id로 상응하는 transcript 가져오고 llm으로 factuality label이랑 factuality type 생성
             """
             file_out = out_path / f"{tag}_{summarizer_identifier}_summary_factuality_by_{labeler_identifier}.json"
             with open(file_out, 'w', encoding='utf-8') as f_out:
-                for row in read_csv(filepath=summary_file_path):  # iter over each transcript-summary pairs
+                for row in read_jsonl(filepath=unique_summary_file_path):  # iter over each transcript-summary pairs
                     retry_cnt = 0
                     while (retry_cnt < 3):
                         try:
@@ -225,8 +227,11 @@ def generate_factuality_files(
                                 }
                                 f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')  # save newly generated & parsed factuaity labels & types
                                 logging.info(f"Successfully saved newly extracted Factuality Labels & Types for sample_id: {sample_id}")
+                                break
+                            retry_cnt += 1
                         except Exception as e:
                             logging.error(f"Pseudo-Labeling Factuality Labels & Types for sample_id({sample_id}) Failed :\n{e}")
+                            retry_cnt += 1
             out_paths.append(out_path)
         assert len(out_paths) == len(summarizer_lm_specs)
         
@@ -268,36 +273,35 @@ def generate_alignment_files(
         keyfacts = load_jsonl(keyfact_file)  # list of dict -> ⚠️ use `sample_id` to match with summary_list
         indexed_keyfacts = {item["sample_id"]: item for item in keyfacts}
 
-        f_out = out_path / f"{tag}_{labeler_identifier}_keyfact_alignment_against_summaries.json"
+        file_out = out_path / f"{tag}_{labeler_identifier}_keyfact_alignment_against_summaries.json"
+        with open(file_out, 'w', encoding='utf-8') as f_out:
+            for summarizer_spec_dict in summarizer_lm_specs:  # for each Summary from differing Summarization LMs
+                summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
+                summary_file = summary_file_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
+                if not os.path.exists(summary_file): # corresponding summary jsonl file doesn't exist
+                    logging.error(f"Failed to find summary jsonl file for {summarizer_identifier} at: {summary_file}")
+                summaries = load_jsonl(summary_file)  # list of dict -> ⚠️ use `sample_id` to match with keyfact_list
+                indexed_summaries = {item["sample_id"]: item for item in summaries}
 
-        for summarizer_spec_dict in summarizer_lm_specs:  # for each Summary from differing Summarization LMs
-            summarizer_identifier = simplify_checkpoint(summarizer_spec_dict["checkpoint"])
-            summary_file = summary_file_path / f"{tag}_summary_by_{summarizer_identifier}.jsonl"
-            if not os.path.exists(summary_file): # corresponding summary jsonl file doesn't exist
-                logging.error(f"Failed to find summary jsonl file for {summarizer_identifier} at: {summary_file}")
-            summaries = load_jsonl(summary_file)  # list of dict -> ⚠️ use `sample_id` to match with keyfact_list
-            indexed_summaries = {item["sample_id"]: item for item in summaries}
-
-            for sample_id in all_sample_ids:
-                keyfact_list = indexed_keyfacts.get(sample_id)
-                summaries_list = indexed_summaries.get(sample_id)
-
-                keyfact_alignment_prompt = get_keyfact_alighment_prompt(keyfacts=keyfact_list, sentences=summaries_list)
-                try:
-                    raw_output = get_openai_response(client=client, prompt=keyfact_alignment_prompt, model=model_ckpt)
-                    keyfact_alignment_labels, aligned_summary_line_numbers = parsing_llm_keyfact_alighment_output(output=raw_output)
-                    '''Score Calculations' omitted here, since it's about creating pseudo-labeled dataset for FineSurE input, not the final score and rankings.'''
-                    new_row = {
-                        "sample_id": sample_id,
-                        "keyfact_labeler": labeler_identifier,
-                        "summarizer": summarizer_identifier,
-                        "labler": labeler_identifier,
-                        "keyfact_list": keyfact_list,
-                        "summary_list": summaries_list,
-                        "keyfact_alignment_labels": keyfact_alignment_labels,
-                        "matched_summary_lines": aligned_summary_line_numbers
-                    }
-                    f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')
-                    logging.info(f"Successfully saved newly labled Keyfact <-> Summary Alignment for sample_id: {sample_id}")
-                except Exception as e:
-                    logging.Error(f"Error while pseudo-labeling keyfact-summary alignment for sample_id({sample_id}):\n{e}")
+                for sample_id in all_sample_ids:
+                    keyfact_list = indexed_keyfacts.get(sample_id)["keyfact_list"]
+                    summary_list = indexed_summaries.get(sample_id)["summary_list"]
+                    try:
+                        keyfact_alignment_prompt = get_keyfact_alighment_prompt(keyfacts=keyfact_list, sentences=summary_list)
+                        raw_output = get_openai_response(client=client, prompt=keyfact_alignment_prompt, model=model_ckpt)
+                        keyfact_alignment_labels, aligned_summary_line_numbers = parsing_llm_keyfact_alighment_output(output=raw_output)
+                        '''Score Calculations' omitted here, since it's about creating pseudo-labeled dataset for FineSurE input, not the final score and rankings.'''
+                        new_row = {
+                            "sample_id": sample_id,
+                            "keyfact_labeler": labeler_identifier,
+                            "summarizer": summarizer_identifier,
+                            "labler": labeler_identifier,
+                            "keyfact_list": keyfact_list,
+                            "summary_list": summary_list,
+                            "keyfact_alignment_labels": keyfact_alignment_labels,
+                            "matched_summary_lines": aligned_summary_line_numbers
+                        }
+                        f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')
+                        logging.info(f"Successfully saved newly labled Keyfact <-> Summary Alignment for sample_id: {sample_id}")
+                    except Exception as e:
+                        logging.error(f"Error while pseudo-labeling keyfact-summary alignment for sample_id({sample_id}):\n{e}")
