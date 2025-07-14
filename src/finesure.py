@@ -16,7 +16,7 @@ def parse_args():
     """
     Parse; Command-Line Arguments
     """
-    parser = argparse.ArgumentParser(description="Preprocess CSV Dataset")
+    parser = argparse.ArgumentParser(description="Run FineSurE Pipeline through Pre-processed Dataset")
     parser.add_argument(
         "--config",
         type=str,
@@ -129,8 +129,8 @@ def finesure_pipeline(
     keyfact_alignment_labels, matched_summary_lines = parsing_llm_keyfact_alighment_output(output=alignment_raw_llm_output)
     assert len(keyfact_alignment_labels) == len(sample["keyfact_list"])
     matched_summary_labels = [0 for _ in range(len(sample["summary_list"]))]
-    print(matched_summary_labels)
-    print(matched_summary_lines)
+    # print(matched_summary_labels)
+    # print(matched_summary_lines)
     for summary_line_number in matched_summary_lines:
         matched_summary_labels[summary_line_number-1] = 1
     assert len(matched_summary_labels) == len(sample["summary_list"])
@@ -179,19 +179,96 @@ def factuality_eval(judge_llm_result_file: str | Path):
 
         summarizer_lm_wise_results[summarizer_lm]['gt_factuality_labels'].extend(gt_factuality_labels)
         summarizer_lm_wise_results[summarizer_lm]['pred_factuality_labels'].extend(pred_factuality_labels)
-        summarizer_lm_wise_results[summarizer_lm]['gt_factuality_scores'].extend(gt_factuality_score)
-        summarizer_lm_wise_results[summarizer_lm]['pred_factuality_scores'].extend(pred_factuality_score)
+        summarizer_lm_wise_results[summarizer_lm]['gt_factuality_scores'].append(gt_factuality_score)
+        summarizer_lm_wise_results[summarizer_lm]['pred_factuality_scores'].append(pred_factuality_score)
 
     bAcc = balancedAcc(full_results['gt_factuality_labels'], full_results['pred_factuality_labels'])
-    print(f"bAcc: {bAcc}")  # ⚠️ replace with logging or file writing
+    logging.info(f"bAcc: {bAcc}")
 
     pearson_corr = pearsonr(full_results['gt_factuality_scores'], full_results['pred_factuality_scores'])
     spearman_corr = spearmanr(full_results['gt_factuality_scores'], full_results['pred_factuality_scores'])
-    print(f"pearson corr: {pearson_corr}")
-    print(f"spearman corr: {spearman_corr}")
+    logging.info(f"pearson corr: {pearson_corr}")
+    logging.info(f"spearman corr: {spearman_corr}")
 
     rank_corr = rank_correlation(model_wise_results=summarizer_lm_wise_results, key='factuality_scores')
-    print(f"rank corr: {rank_corr}")
+    logging.info(f"rank corr: {rank_corr}")
+
+    return {
+        'bAcc': bAcc, 
+        'pearson_corr': pearson_corr, 
+        'spearman_corr': spearman_corr, 
+        'rank_corr': rank_corr
+    }
+
+def completeness_and_conciseness_eval(judge_llm_result_file: str | Path):
+    file_in = Path(judge_llm_result_file)
+    results_dict = load_jsonl(filepath=file_in)
+    
+    summarizer_lm_wise_results = {}
+    full_results = {
+        'gt_completeness_scores': [],
+        'pred_completeness_scores': [],
+        'gt_conciseness_scores': [],
+        'pred_conciseness_scores': [],
+    }
+
+    for result in results_dict:
+        summarizer_lm = result["summarizer"]
+        if summarizer_lm not in summarizer_lm_wise_results:
+            summarizer_lm_wise_results[summarizer_lm] = {
+                'gt_completeness_scores': [],
+                'pred_completeness_scores': [],
+                'gt_conciseness_scores': [],
+                'pred_conciseness_scores': [],
+            }
+        
+        # Human or SOTA's FineSurE Result's Keyfact<->Summary Alignment Labels
+        gt_alignment_labels = result['gt_labels']['keyfact_alignment_labels']
+        gt_sentence_labels = result['gt_labels']['matched_summary_labels']
+
+        # LLM-as-a-Judge FineSurE Result's Keyfact<->Summary Alignment Labels
+        pred_alignment_labels = result['pred_labels']['keyfact_alignment_labels']
+        pred_sentence_labels = result['pred_labels']['matched_summary_labels']
+
+        # calculate Completeness Percentage Score
+        gt_completeness_score = compute_completeness_percentage_score(gt_alignment_labels)
+        pred_completeness_score = compute_completeness_percentage_score(pred_alignment_labels)
+
+        # calculate Conciseness Percentage Score
+        gt_conciseness_score = compute_conciseness_percentage_score(gt_sentence_labels)
+        pred_conciseness_score = compute_conciseness_percentage_score(pred_sentence_labels)
+
+        full_results['gt_completeness_scores'].append(gt_completeness_score)
+        full_results['pred_completeness_scores'].append(pred_completeness_score)
+        full_results['gt_conciseness_scores'].append(gt_conciseness_score)
+        full_results['pred_conciseness_scores'].append(pred_conciseness_score)
+
+        summarizer_lm_wise_results[summarizer_lm]['gt_completeness_scores'].append(gt_completeness_score)
+        summarizer_lm_wise_results[summarizer_lm]['pred_completeness_scores'].append(pred_completeness_score)
+        summarizer_lm_wise_results[summarizer_lm]['gt_conciseness_scores'].append(gt_conciseness_score)
+        summarizer_lm_wise_results[summarizer_lm]['pred_conciseness_scores'].append(pred_conciseness_score)
+
+    # Calculate Correlations for COMPLETENESS
+    pearson_corr = pearsonr(full_results['gt_completeness_scores'], full_results['pred_completeness_scores'])
+    spearman_corr = spearmanr(full_results['gt_completeness_scores'], full_results['pred_completeness_scores'])
+    rank_corr = rank_correlation(model_wise_results=summarizer_lm_wise_results, key='completeness_scores')
+    completeness_eval_result = {
+        'pearson_corr': pearson_corr, 
+        'spearman_corr': spearman_corr, 
+        'rank_corr': rank_corr
+    }
+
+    # Calculate Correlations for CONCISENESS
+    pearson_corr = pearsonr(full_results['gt_conciseness_scores'], full_results['pred_conciseness_scores'])
+    spearman_corr = spearmanr(full_results['gt_conciseness_scores'], full_results['pred_conciseness_scores'])
+    rank_corr = rank_correlation(model_wise_results=summarizer_lm_wise_results, key='conciseness_scores')
+    conciseness_eval_result = {
+        'pearson_corr': pearson_corr, 
+        'spearman_corr': spearman_corr, 
+        'rank_corr': rank_corr
+    }
+
+    return completeness_eval_result, conciseness_eval_result
 
 
 def main():
@@ -230,7 +307,11 @@ def main():
 
 if __name__ == "__main__":
     # main()
-    factuality_eval(judge_llm_result_file="output/finesure_pipeline_output/MTS_Dialog_Sample_finesure-by-judge-openai--gpt-4.1-mini-2025-04-14.json")
+    factuality_eval_result = factuality_eval(judge_llm_result_file="output/finesure_pipeline_output/MTS_Dialog_Sample_finesure-by-judge-openai--gpt-4.1-mini-2025-04-14.json")
+    conpleteness_eval_result, conciseness_eval_result = completeness_and_conciseness_eval(judge_llm_result_file="output/finesure_pipeline_output/MTS_Dialog_Sample_finesure-by-judge-openai--gpt-4.1-mini-2025-04-14.json")
+    print(f'factuality eval result:\n{factuality_eval_result}')
+    print(f'completeness eval result:\n{conpleteness_eval_result}')
+    print(f'conciseness eval result:\n{conciseness_eval_result}')
 
 """
 To Run: 

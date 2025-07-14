@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.stats import pearsonr, spearmanr
 import scipy.stats as ss
+import logging
 
 '''
  Score funtions
@@ -10,11 +11,14 @@ def compute_faithfulness_percentage_score(pred_faithfulness_labels):
     return faithfulness
 
 def compute_completeness_percentage_score(pred_alignment_labels):
+    # print(f"alignment_labels:\n{pred_alignment_labels}")
     completeness = sum(pred_alignment_labels) / len(pred_alignment_labels)  
+    # print(f"completeness: {completeness}")
     return completeness
 
-def compute_conciseness_percentage_score(pred_sentence_line_numbers, num_sentences):
-    conciseness = len(pred_sentence_line_numbers) / num_sentences
+def compute_conciseness_percentage_score(pred_matched_summary_labels):
+    conciseness = sum(pred_matched_summary_labels) / len(pred_matched_summary_labels)
+    # print(f"conciseness: {conciseness}")
     return conciseness
 
 def balancedAcc(gt, pred):
@@ -72,11 +76,11 @@ def rank_correlation(model_wise_results, key, min_number=0):
 
     estimated_rank = ss.rankdata(pred_errors)
     human_rank = ss.rankdata(gt_errors)
-    #logging.info("models:", models)
-    #logging.info('gt ' + key + ':', gt_errors)
-    #logging.info('pred ' + key + ':', pred_errors )
-    #logging.info('gt rank ' + key + ':', human_rank)
-    #logging.info('pred rank ' + key + ':', estimated_rank)
+    # print("models:", models)
+    # print('gt ' + key + ':', gt_errors)
+    # print('pred ' + key + ':', pred_errors )
+    # print('gt rank ' + key + ':', human_rank)
+    # print('pred rank ' + key + ':', estimated_rank)
     spearman_corr = spearmanr(estimated_rank, human_rank)
 
     return spearman_corr
