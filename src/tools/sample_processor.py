@@ -289,7 +289,15 @@ def generate_alignment_files(
                     try:
                         keyfact_alignment_prompt = get_keyfact_alighment_prompt(keyfacts=keyfact_list, sentences=summary_list)
                         raw_output = get_openai_response(client=client, prompt=keyfact_alignment_prompt, model=model_ckpt)
-                        keyfact_alignment_labels, aligned_summary_line_numbers = parsing_llm_keyfact_alighment_output(output=raw_output)
+                        keyfact_alignment_labels, matched_summary_line_numbers = parsing_llm_keyfact_alighment_output(output=raw_output)
+                        matched_summary_labels = [0 for _ in range(len(summary_list))]
+                        for summary_line_number in matched_summary_line_numbers:
+                            matched_summary_labels[summary_line_number-1] = 1
+                        gt_labels = {
+                            "keyfact_alignment_labels": keyfact_alignment_labels,
+                            "matched_summary_labels": matched_summary_labels,
+                            "matched_summary_lines": matched_summary_line_numbers
+                        }
                         '''Score Calculations' omitted here, since it's about creating pseudo-labeled dataset for FineSurE input, not the final score and rankings.'''
                         new_row = {
                             "sample_id": sample_id,
@@ -298,8 +306,7 @@ def generate_alignment_files(
                             "labler": labeler_identifier,
                             "keyfact_list": keyfact_list,
                             "summary_list": summary_list,
-                            "keyfact_alignment_labels": keyfact_alignment_labels,
-                            "matched_summary_lines": aligned_summary_line_numbers
+                            "gt_labels": gt_labels
                         }
                         f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')
                         logging.info(f"Successfully saved newly labled Keyfact <-> Summary Alignment for sample_id: {sample_id}")

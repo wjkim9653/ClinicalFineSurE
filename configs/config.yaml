@@ -21,6 +21,21 @@ pseudo-labeler:
       checkpoint: "openai/gpt-4.1-mini-2025-04-14"
       endpoint: "https://api.openai.com/v1/chat/completions"
 
+judge-llm:
+  spec:
+    - provider: "openai"
+      checkpoint: "openai/gpt-4.1-mini-2025-04-14"
+      endpoint: "https://api.openai.com/v1/chat/completions"
+    - provider: "openrouter"
+      checkpoint: "qwen/qwen3-32b:free"
+      endpoint: "https://openrouter.ai/api/v1"
+    - provider: "openrouter"
+      checkpoint: "qwen/qwen3-14b:free"
+      endpoint: "https://openrouter.ai/api/v1"
+    - provider: "openrouter"
+      checkpoint: "qwen/qwen3-8b:free"
+      endpoint: "https://openrouter.ai/api/v1"
+
 input_paths:
   MTS-Dialog-Sampled-10: "data/sampled/MTS-Dialog.csv"
 
@@ -30,6 +45,7 @@ output_paths:
   summary: "data/processed/(3)_summary"
   factuality: "data/processed/(4)_factuality"
   alignment: "data/processed/(5)_alignment"
+  finesure_pipeline: "output/finesure_pipeline_output"
 
 logging:
   level: "INFO"

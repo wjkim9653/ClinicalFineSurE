@@ -34,18 +34,6 @@ def parse_args():
 def load_config(config_path):
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
-
-'''def process_row(row: Dict[str, Any], processor: SampleProcessor) -> Dict[str, Any]:
-    """
-    Process; a single Row; using an External Processor class instance
-    """
-    try:
-        result = processor.process(row)
-        return result
-    except Exception as e:
-        logging.error(f"Error processing row w/ id={row.get('ID')}")  # ⚠️ original csv's column-name dependency here! ideally, such hard-coded dependency("ID") must be removed. i leave it to future work...
-        fallback_result = processor.fallback_process(row)  # some kind of fallback when there's an error. i guess return some dict that share the same structure(k-v) but w/ placeholder values? idk will implement later. think i should include 'error' field of something.
-        return fallback_result'''
     
 def setup_logger(level: str):
     """
@@ -60,7 +48,6 @@ def setup_logger(level: str):
         ]
     )
 
-    
 def main():
     args = parse_args()
     config = load_config(args.config)
@@ -136,9 +123,7 @@ def main():
             summarizer_lm_specs=config["summarizer"]["spec"]
         )
     
-    
     logging.info(f"Finished processing. Output saved to: {output_path}")
-
 
 
 if __name__ == "__main__":
