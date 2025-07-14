@@ -117,23 +117,36 @@ def finesure_pipeline(
     client, model_ckpt = inference_api_resolver(inference_spec=judge_llm_spec)
 
     # factuality prediction 수행
-    fact_checking_prompt = get_fact_checking_prompt(input=sample['transcript'], sentences=sample['summary_list'])
-    factuality_raw_llm_output = get_openai_response(client=client, prompt=fact_checking_prompt, model=model_ckpt)
-    factuality_labels, factuality_types = parsing_llm_fact_checking_output(output=factuality_raw_llm_output)
-    assert len(factuality_labels) == len(sample["summary_list"])  # Successful Parsing
-    assert len(factuality_types) == len(sample["summary_list"])  # Successful Parsing
+    retry_cnt = 0
+    while retry_cnt < 3:
+        try:
+            fact_checking_prompt = get_fact_checking_prompt(input=sample['transcript'], sentences=sample['summary_list'])
+            factuality_raw_llm_output = get_openai_response(client=client, prompt=fact_checking_prompt, model=model_ckpt)
+            factuality_labels, factuality_types = parsing_llm_fact_checking_output(output=factuality_raw_llm_output)
+            assert len(factuality_labels) == len(sample["summary_list"])  # Successful Parsing
+            assert len(factuality_types) == len(sample["summary_list"])  # Successful Parsing
+            break
+        except Exception as e:
+            logging.error(f"⚠️ Factuality prediction failed during FineSurE pipeline (factuality_prediction) w/ llm({model_ckpt}), sample_id({sample['sample_id']})\n{e}")
+            logging.error(f"Trying Again...(Retry Count at: {retry_cnt})")
+    
     
     # alignment prediction 수행
-    keyfact_alighment_prompt = get_keyfact_alighment_prompt(keyfacts=sample["keyfact_list"], sentences=sample["summary_list"])
-    alignment_raw_llm_output = get_openai_response(client=client, prompt=keyfact_alighment_prompt, model=model_ckpt)
-    keyfact_alignment_labels, matched_summary_lines = parsing_llm_keyfact_alighment_output(output=alignment_raw_llm_output)
-    assert len(keyfact_alignment_labels) == len(sample["keyfact_list"])
-    matched_summary_labels = [0 for _ in range(len(sample["summary_list"]))]
-    # print(matched_summary_labels)
-    # print(matched_summary_lines)
-    for summary_line_number in matched_summary_lines:
-        matched_summary_labels[summary_line_number-1] = 1
-    assert len(matched_summary_labels) == len(sample["summary_list"])
+    retry_cnt = 0
+    while retry_cnt < 3:
+        try:
+            keyfact_alighment_prompt = get_keyfact_alighment_prompt(keyfacts=sample["keyfact_list"], sentences=sample["summary_list"])
+            alignment_raw_llm_output = get_openai_response(client=client, prompt=keyfact_alighment_prompt, model=model_ckpt)
+            keyfact_alignment_labels, matched_summary_lines = parsing_llm_keyfact_alighment_output(output=alignment_raw_llm_output)
+            assert len(keyfact_alignment_labels) == len(sample["keyfact_list"])
+            matched_summary_labels = [0 for _ in range(len(sample["summary_list"]))]
+            for summary_line_number in matched_summary_lines:
+                matched_summary_labels[summary_line_number-1] = 1
+            assert len(matched_summary_labels) == len(sample["summary_list"])
+            break
+        except Exception as e:
+            logging.error(f"⚠️ Factuality prediction failed during FineSurE pipeline (alignment_prediction) w/ llm({model_ckpt}), sample_id({sample['sample_id']})\n{e}")
+            logging.error(f"Trying Again...(Retry Count at: {retry_cnt})")
     
     pred_labels = {
         "keyfact_alignment_labels": keyfact_alignment_labels,
@@ -183,15 +196,13 @@ def factuality_eval(judge_llm_result_file: str | Path):
         summarizer_lm_wise_results[summarizer_lm]['pred_factuality_scores'].append(pred_factuality_score)
 
     bAcc = balancedAcc(full_results['gt_factuality_labels'], full_results['pred_factuality_labels'])
-    logging.info(f"bAcc: {bAcc}")
-
     pearson_corr = pearsonr(full_results['gt_factuality_scores'], full_results['pred_factuality_scores'])
     spearman_corr = spearmanr(full_results['gt_factuality_scores'], full_results['pred_factuality_scores'])
-    logging.info(f"pearson corr: {pearson_corr}")
-    logging.info(f"spearman corr: {spearman_corr}")
-
     rank_corr = rank_correlation(model_wise_results=summarizer_lm_wise_results, key='factuality_scores')
-    logging.info(f"rank corr: {rank_corr}")
+    logging.info(f"Factuality - Balanced Accuracy: {bAcc}")
+    logging.info(f"Factuality - Pearson Correlation: {pearson_corr}")
+    logging.info(f"Factuality - Spearman Correlation: {spearman_corr}")
+    logging.info(f"Factuality - Rank Correlation: {rank_corr}")
 
     return {
         'bAcc': bAcc, 
@@ -252,6 +263,9 @@ def completeness_and_conciseness_eval(judge_llm_result_file: str | Path):
     pearson_corr = pearsonr(full_results['gt_completeness_scores'], full_results['pred_completeness_scores'])
     spearman_corr = spearmanr(full_results['gt_completeness_scores'], full_results['pred_completeness_scores'])
     rank_corr = rank_correlation(model_wise_results=summarizer_lm_wise_results, key='completeness_scores')
+    logging.info(f"Completeness - Pearson Correlation: {pearson_corr}")
+    logging.info(f"Completeness - Spearman Correlation: {spearman_corr}")
+    logging.info(f"Completeness - Rank Correlation: {rank_corr}")
     completeness_eval_result = {
         'pearson_corr': pearson_corr, 
         'spearman_corr': spearman_corr, 
@@ -262,6 +276,9 @@ def completeness_and_conciseness_eval(judge_llm_result_file: str | Path):
     pearson_corr = pearsonr(full_results['gt_conciseness_scores'], full_results['pred_conciseness_scores'])
     spearman_corr = spearmanr(full_results['gt_conciseness_scores'], full_results['pred_conciseness_scores'])
     rank_corr = rank_correlation(model_wise_results=summarizer_lm_wise_results, key='conciseness_scores')
+    logging.info(f"Conciseness - Pearson Correlation: {pearson_corr}")
+    logging.info(f"Conciseness - Spearman Correlation: {spearman_corr}")
+    logging.info(f"Conciseness - Rank Correlation: {rank_corr}")
     conciseness_eval_result = {
         'pearson_corr': pearson_corr, 
         'spearman_corr': spearman_corr, 
@@ -285,15 +302,15 @@ def main():
             logging.error(f"Failed to check/create output directory for {output_descriptor} at: {output_path}")
 
     for spec in config["judge-llm"]["spec"]:
-        logging.info(f"Running FineSurE Pipeline with Judge LLM: {spec['checkpoint']}")
+        logging.info(f"🔥 Running FineSurE Pipeline with Judge LLM: {spec['checkpoint']}")
         judge_llm_identifier = simplify_checkpoint(spec['checkpoint'])
-        file_out = Path(output_paths["finesure_pipeline"]) / f"{config['tag']}_finesure-by-judge-{judge_llm_identifier}.json"
-        with open(file_out, 'w', encoding='utf-8') as f_out:
+        finesure_output_file = Path(output_paths["finesure_pipeline"]) / f"{config['tag']}_finesure-by-judge-{judge_llm_identifier}.json"
+        with open(finesure_output_file, 'w', encoding='utf-8') as f_out:
             for aggregate_sample_dict in data_aggregator(
                 tag=config["tag"],
                 factuality_file_path=output_paths["factuality"],
                 alignment_file_path=output_paths["alignment"],
-                out_path='output/finesure_pipeline_output/',
+                out_path=output_paths["finesure_pipeline"],
                 pseudo_labeler_specs=config["pseudo-labeler"]["spec"],
                 summarizer_lm_specs=config["summarizer"]["spec"]
             ):
@@ -302,16 +319,29 @@ def main():
                     sample=aggregate_sample_dict
                 )
                 f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')
-                logging.info(f"Successfully saved newly predictions for sample_id: {new_row['sample_id']}")
+                logging.info(f"✅ Successfully saved newly predictions for sample_id: {new_row['sample_id']}")
+        logging.info(f"✅ Successfully completed FineSurE Pipeline w/ Judge LLM: {spec['checkpoint']} (saved at: {finesure_output_file})")
+        
+        logging.info(f"🔥 Calculating metrics from FineSurE result w/ Judge LLM: {spec['checkpoint']}")
+        factuality_eval_result = factuality_eval(
+            judge_llm_result_file=finesure_output_file
+        )
+        completeness_eval_result, conciseness_eval_result = completeness_and_conciseness_eval(
+            judge_llm_result_file=finesure_output_file
+        )
+        finesure_metric_file = Path(output_paths["finesure_result"]) / f"{config['tag']}_finesure-by-judge-{judge_llm_identifier}-result-metrics.json"
+        new_row = {
+            "factuality_eval_result": factuality_eval_result,
+            "completeness_eval_result": completeness_eval_result,
+            "conciseness_eval_result": conciseness_eval_result
+        }
+        with open(finesure_metric_file, 'w', encoding='utf-8') as f_out:
+            f_out.write(json.dumps(new_row, ensure_ascii=False) + '\n')
+            logging.info(f"✅ Successfully calculated FineSurE metrics w/ Judge LLM: {spec['checkpoint']} (saved at: {finesure_metric_file})")
 
 
 if __name__ == "__main__":
-    # main()
-    factuality_eval_result = factuality_eval(judge_llm_result_file="output/finesure_pipeline_output/MTS_Dialog_Sample_finesure-by-judge-openai--gpt-4.1-mini-2025-04-14.json")
-    conpleteness_eval_result, conciseness_eval_result = completeness_and_conciseness_eval(judge_llm_result_file="output/finesure_pipeline_output/MTS_Dialog_Sample_finesure-by-judge-openai--gpt-4.1-mini-2025-04-14.json")
-    print(f'factuality eval result:\n{factuality_eval_result}')
-    print(f'completeness eval result:\n{conpleteness_eval_result}')
-    print(f'conciseness eval result:\n{conciseness_eval_result}')
+    main()
 
 """
 To Run: 
